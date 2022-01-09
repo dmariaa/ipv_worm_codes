@@ -122,16 +122,13 @@ class WarmCodesReader:
         masked = cv2.erode(masked, kernel=np.ones((3, 3)), iterations=2)
         return masked
 
-    def get_cell_energy(self, thermal, block):
+    def get_cell_energy(self, thermal_masked, block):
         """
         Calculates energy for a cell in thermal image
         :param thermal: thermal image
         :param block: top, left, width, height block
         :return: energy (sum of values / area of block)
         """
-        mask = self.thresholder(thermal)
-        thermal_masked = thermal * mask
-
         (x, y, w, h) = block
         key_block = thermal_masked[y:y + h + 1, x:x + w + 1]
         return np.sum(key_block) / (w * h)
@@ -143,10 +140,13 @@ class WarmCodesReader:
         :return: array of energies by key, normalized in 0-1 range, all values below self.minimum_energy
         ar dropped to 0.
         """
+        mask = self.thresholder(thermal)
+        thermal_masked = thermal * mask
+
         energies = np.zeros(10, dtype=float)
 
         for i, (x, y, w, h) in enumerate(self.ir_positions):
-            energy = self.get_cell_energy(thermal, (x, y, w, h))
+            energy = self.get_cell_energy(thermal_masked, (x, y, w, h))
             energies[i] = energy
 
         energies = (energies - np.min(energies)) / np.ptp(energies)
@@ -161,9 +161,9 @@ class WarmCodesReader:
         """
         color, thermal = self.read_flir(index)
         energy = self.get_energy_count(thermal)
-        indexes = np.argwhere(energy > 0.).ravel()[:4]
+        indexes = np.argwhere(energy > 0.).ravel()
         energies = energy[indexes]
-        buttons_indexes = np.argsort(energies)
+        buttons_indexes = np.argsort(energies)[-4:]
         buttons = indexes[buttons_indexes]
         return buttons, color, thermal
 
@@ -196,12 +196,12 @@ class WarmCodesReader:
         mask = self.thresholder(thermal)
         mask_lines = self.draw_reference_lines(mask)
 
-        plt.figure(figsize=(30, 10))
-        plt.subplot(1, 3, 1)
-        plt.imshow(color, cmap='gray')
-        plt.subplot(1, 3, 2)
+        plt.figure(figsize=(10, 5))
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(color, cmap='gray')
+        plt.subplot(1, 2, 1)
         plt.imshow(thermal_lines, cmap='jet')
-        plt.subplot(1, 3, 3)
+        plt.subplot(1, 2, 2)
         plt.imshow(mask_lines)
 
 
@@ -210,7 +210,7 @@ if __name__ == "__main__":
 
     f = open('digitos.csv', 'w')
     filter = reader.data['digits'] == ''  # all non labeled
-    # filter = reader.data['file'] == 'DIGITOS_035'   # only one file
+    # filter = reader.data['file'] == 'DIGITOS_032'   # only one file
 
     for index, data in reader.data.loc[filter].iterrows():
         buttons, color, thermal = reader.get_pressed_buttons(index)
@@ -221,11 +221,12 @@ if __name__ == "__main__":
         f.write(f"{file_result}\n")
         print(file_result)
 
-        # plot result
-        reader.plot_sample(color, thermal)
-        plt.suptitle(
-            f"Index: {index}: File: {reader.data.iloc[index]['file']} Label: {reader.data.iloc[index]['digits']} "
-            f"Prediction: {buttons}")
-        plt.show()
+        # plot result for debugging purposes only
+        # reader.plot_sample(color, thermal)
+        # plt.suptitle(
+        #     f"Index: {index}: File: {reader.data.iloc[index]['file']} Label: {reader.data.iloc[index]['digits']} "
+        #     f"Prediction: {buttons}")
+        # plt.tight_layout()
+        # plt.savefig(f"out/{reader.data.iloc[index]['file']}.png")
 
     f.close()
